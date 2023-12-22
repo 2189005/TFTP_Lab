@@ -2,14 +2,18 @@ import socket
 import argparse
 from struct import pack
 
+#기본 설정 값들
 DEFAULT_PORT = 69
 BLOCK_SIZE = 512
 DEFAULT_TRANSFER_MODE = 'octet'
 TIMEOUT = 5  # 타임아웃 시간 (초)
 
+#TFTP의 메시지 타입
 OPCODE = {'RRQ': 1, 'WRQ': 2, 'DATA': 3, 'ACK': 4, 'ERROR': 5}
+#전송 모드
 MODE = {'netascii': 1, 'octet': 2, 'mail': 3}
 
+#TFTP 에러코드 및 설명
 ERROR_CODE = {
     0: "Not defined, see error message (if any).",
     1: "File not found.",
@@ -21,7 +25,7 @@ ERROR_CODE = {
     7: "No such user."
 }
 
-
+#RRQ 메시지를 서버에 전송
 def send_rrq(filename, mode):
     # RRQ 메시지의 포맷을 설정하고 서버에 전송
     format_str = f'>h{len(filename)}sB{len(mode)}sB'
@@ -29,7 +33,7 @@ def send_rrq(filename, mode):
     sock.sendto(rrq_message, server_address)
     print(rrq_message)
 
-
+# ACK 메시지를 서버에 전송
 def send_ack(seq_num, server):
     # ACK 메시지의 포맷을 설정하고 서버에 전송
     format_str = f'>hh'
@@ -56,6 +60,11 @@ server_ip = args.host
 server_port = args.port or DEFAULT_PORT
 server_address = (server_ip, server_port)
 
+#전송 모드, 동작, 파일 이름 설정
+mode = DEFAULT_TRANSFER_MODE
+operation = args.operation
+filename = args.filename
+
 # RRQ 메시지 전송
 send_rrq(args.filename, DEFAULT_TRANSFER_MODE)
 
@@ -72,7 +81,7 @@ while True:
         # 메시지 타입 확인
         if opcode == OPCODE['DATA']:
             block_number = int.from_bytes(data[2:4], 'big')
-            # 중복된 블록 번호를 피하기 위해 ACK를 보내기 전에 블록 번호를 확인합니다.
+            # 중복된 블록 번호를 피하기 위해 ACK를 보내기 전에 블록 번호를 확인
             if block_number == expected_block_number:
                 send_ack(block_number, server_new_socket)
                 file_block = data[4:]
@@ -81,9 +90,9 @@ while True:
                 print(file_block.decode())
             else:
                 # 수신된 블록 번호가 기대하는 블록 번호와 일치하지 않으면,
-                # 마지막으로 성공적으로 수신한 블록에 대한 ACK를 다시 보냅니다.
+                # 마지막으로 성공적으로 수신한 블록에 대한 ACK를 재전송
                 send_ack(expected_block_number - 1, server_new_socket)
-
+        #에러코드 확인
         elif opcode == OPCODE['ERROR']:
             error_code = int.from_bytes(data[2:4], byteorder='big')
             print(ERROR_CODE[error_code])
@@ -92,13 +101,16 @@ while True:
         else:
             break
 
-        # 타임아웃 조건을 확인하고 루프를 종료합니다.
+        # 타임아웃 조건을 확인하고 루프를 종료
         if len(file_block) < BLOCK_SIZE:
             file.close()
             print(len(file_block))
             break
 
     except socket.timeout:
+        #소켓 수신 시 타임아웃 발생한 경우 예외 처리
         print("타임아웃")
+
+        #파일을 닫고 루프를 종료
         file.close()
         break
